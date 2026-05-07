@@ -125,6 +125,13 @@ MOCK_EVENT = {
             [],
             id="message-not-found",
         ),
+        pytest.param(
+            [Message(text="Need review <https://app.graphite.com/github/pr/example/repo/42>", timestamp="yyyy-mm-dd")],
+            [Review(state="approved", username="alice")],
+            [],
+            ["test_review_started", "test_approved"],
+            id="graphite-url-match",
+        ),
     ],
 )
 def test_on_pull_request_review(

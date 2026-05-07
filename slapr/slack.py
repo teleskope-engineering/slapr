@@ -10,6 +10,7 @@ import slack_sdk
 from slack_sdk.errors import SlackApiError
 
 PR_URL_PATTERN = r"<(?P<url>.*)>"
+GITHUB_PR_URL_RE = re.compile(r"^https?://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+)/pull/(?P<number>\d+)")
 
 
 class Message(NamedTuple):
@@ -81,6 +82,15 @@ class SlackClient:
     def find_timestamp_of_review_requested_message(self, pr_url: str, channel_id: str) -> Optional[str]:
         messages = self._backend.get_latest_messages(channel_id=channel_id)
 
+        # Also accept Graphite-style links like
+        # https://app.graphite.com/github/pr/<owner>/<repo>/<number>
+        accept_prefixes = [pr_url]
+        gh_match = GITHUB_PR_URL_RE.match(pr_url)
+        if gh_match is not None:
+            accept_prefixes.append(
+                "https://app.graphite.com/github/pr/{owner}/{repo}/{number}".format(**gh_match.groupdict())
+            )
+
         for message in messages:
             match = re.search(PR_URL_PATTERN, message.text)
 
@@ -90,9 +100,10 @@ class SlackClient:
             # Examples:
             # https://github.com/owner/repo/pull/6/files
             # https://github.com/owner/repo/pull/6/s
+            # https://app.graphite.com/github/pr/owner/repo/6
             url = match.group("url")
 
-            if not url.startswith(pr_url):
+            if not any(url.startswith(prefix) for prefix in accept_prefixes):
                 continue
 
             return message.timestamp
