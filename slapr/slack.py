@@ -9,7 +9,7 @@ from typing import List, NamedTuple, Optional, Set
 import slack_sdk
 from slack_sdk.errors import SlackApiError
 
-PR_URL_PATTERN = r"<(?P<url>.*)>"
+PR_URL_PATTERN = r"<(?P<url>[^>]*)>"
 GITHUB_PR_URL_RE = re.compile(r"^https?://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+)/pull/(?P<number>\d+)")
 
 
@@ -92,21 +92,17 @@ class SlackClient:
             )
 
         for message in messages:
-            match = re.search(PR_URL_PATTERN, message.text)
-
-            if match is None:
-                continue
-
-            # Examples:
-            # https://github.com/owner/repo/pull/6/files
-            # https://github.com/owner/repo/pull/6/s
-            # https://app.graphite.com/github/pr/owner/repo/6
-            url = match.group("url")
-
-            if not any(url.startswith(prefix) for prefix in accept_prefixes):
-                continue
-
-            return message.timestamp
+            # Walk every <...> segment in the message text — Slack wraps both
+            # subteam/user mentions (<!subteam^X>, <@U123>) and links in
+            # angle brackets, so the PR URL is not always the first match.
+            # Examples of valid URLs:
+            #   https://github.com/owner/repo/pull/6/files
+            #   https://github.com/owner/repo/pull/6/s
+            #   https://app.graphite.com/github/pr/owner/repo/6
+            for match in re.finditer(PR_URL_PATTERN, message.text):
+                url = match.group("url")
+                if any(url.startswith(prefix) for prefix in accept_prefixes):
+                    return message.timestamp
 
         return None
 

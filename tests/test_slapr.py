@@ -132,6 +132,20 @@ MOCK_EVENT = {
             ["test_review_started", "test_approved"],
             id="graphite-url-match",
         ),
+        pytest.param(
+            [Message(text="<!subteam^S0AFL3RJFMH> please review\n<https://github.com/example/repo/pull/42>", timestamp="yyyy-mm-dd")],
+            [Review(state="approved", username="alice")],
+            [],
+            ["test_review_started", "test_approved"],
+            id="subteam-mention-before-url",
+        ),
+        pytest.param(
+            [Message(text="<@U12345> can you look <https://app.graphite.com/github/pr/example/repo/42>", timestamp="yyyy-mm-dd")],
+            [Review(state="approved", username="alice")],
+            [],
+            ["test_review_started", "test_approved"],
+            id="user-mention-before-graphite-url",
+        ),
     ],
 )
 def test_on_pull_request_review(
