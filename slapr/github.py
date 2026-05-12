@@ -43,7 +43,11 @@ class WebGithubBackend(GithubBackend):
 
     def get_pr_reviews(self, pr_number: int) -> List[Review]:
         reviews = self._gh.get_repo(self.repo).get_pull(pr_number).get_reviews()
-        return [Review(state=review.state.lower(), username=review.user.login) for review in reviews]
+        return [
+            Review(state=review.state.lower(), username=review.user.login)
+            for review in reviews
+            if review.user.type != "Bot"
+        ]
 
     def get_pr(self, pr_number: int) -> PullRequest:
         pr = self._gh.get_repo(self.repo).get_pull(pr_number)

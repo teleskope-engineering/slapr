@@ -19,6 +19,11 @@ def main(config: Config) -> None:
         print("Fork PRs are not supported.")
         return
 
+    review = event.get("review") or {}
+    if review.get("user", {}).get("type") == "Bot":
+        print(f"Skipping bot review by {review['user'].get('login')}")
+        return
+
     pr_number: int = event["pull_request"]["number"]
     pr = github.get_pr(pr_number=pr_number)
     reviews = github.get_pr_reviews(pr_number=pr_number)
