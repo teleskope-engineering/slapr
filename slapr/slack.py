@@ -82,8 +82,6 @@ class SlackClient:
     def find_timestamp_of_review_requested_message(self, pr_url: str, channel_id: str) -> Optional[str]:
         messages = self._backend.get_latest_messages(channel_id=channel_id)
 
-        # Also accept Graphite-style links like
-        # https://app.graphite.com/github/pr/<owner>/<repo>/<number>
         accept_prefixes = [pr_url]
         gh_match = GITHUB_PR_URL_RE.match(pr_url)
         if gh_match is not None:
@@ -92,13 +90,7 @@ class SlackClient:
             )
 
         for message in messages:
-            # Walk every <...> segment in the message text — Slack wraps both
-            # subteam/user mentions (<!subteam^X>, <@U123>) and links in
-            # angle brackets, so the PR URL is not always the first match.
-            # Examples of valid URLs:
-            #   https://github.com/owner/repo/pull/6/files
-            #   https://github.com/owner/repo/pull/6/s
-            #   https://app.graphite.com/github/pr/owner/repo/6
+            # Slack wraps both <@U123>/<!subteam^X> mentions and links in <>, so the PR URL isn't always first.
             for match in re.finditer(PR_URL_PATTERN, message.text):
                 url = match.group("url")
                 if any(url.startswith(prefix) for prefix in accept_prefixes):
