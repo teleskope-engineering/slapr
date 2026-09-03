@@ -3,6 +3,8 @@
 # This product includes software developed at Datadog (https://www.datadoghq.com/)
 # Copyright 2023-present Datadog, Inc.
 
+from typing import Optional
+
 from . import emojis
 from .config import Config
 
@@ -38,7 +40,13 @@ def main(config: Config) -> None:
     pr_url: str = event["pull_request"]["html_url"]
     print(f"Event PR: {pr_url}")
 
-    timestamp = slack.find_timestamp_of_review_requested_message(pr_url=pr_url, channel_id=config.slack_channel_id)
+    timestamp: Optional[str] = None
+    matched_channel_id: str = ""
+    for channel_id in config.slack_channel_ids:
+        timestamp = slack.find_timestamp_of_review_requested_message(pr_url=pr_url, channel_id=channel_id)
+        if timestamp is not None:
+            matched_channel_id = channel_id
+            break
     print(f"Slack message timestamp: {timestamp}")
 
     if timestamp is None:
@@ -46,7 +54,7 @@ def main(config: Config) -> None:
         return
 
     existing_emojis = slack.get_emojis_for_user(
-        timestamp=timestamp, channel_id=config.slack_channel_id, user_id=config.slapr_bot_user_id
+        timestamp=timestamp, channel_id=matched_channel_id, user_id=config.slapr_bot_user_id
     )
     print(f"Existing emojis: {', '.join(existing_emojis)}")
 
@@ -76,12 +84,12 @@ def main(config: Config) -> None:
         slack.add_reaction(
             timestamp=timestamp,
             emoji=review_emoji,
-            channel_id=config.slack_channel_id,
+            channel_id=matched_channel_id,
         )
 
     for review_emoji in emojis_to_remove:
         slack.remove_reaction(
             timestamp=timestamp,
             emoji=review_emoji,
-            channel_id=config.slack_channel_id,
+            channel_id=matched_channel_id,
         )
