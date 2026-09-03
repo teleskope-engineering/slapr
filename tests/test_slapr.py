@@ -3,7 +3,7 @@
 # This product includes software developed at Datadog (https://www.datadoghq.com/)
 # Copyright 2023-present Datadog, Inc.
 
-from typing import List
+from typing import Dict, List, Optional
 
 import pytest
 
@@ -14,13 +14,22 @@ from slapr.slack import Message, Reaction, SlackBackend, SlackClient
 
 
 class MockSlackBackend(SlackBackend):
-    def __init__(self, messages: List[Message], target_message: Message, reactions: List[Reaction]) -> None:
+    def __init__(
+        self,
+        messages: List[Message],
+        target_message: Message,
+        reactions: List[Reaction],
+        messages_by_channel_id: Optional[Dict[str, List[Message]]] = None,
+    ) -> None:
         self.messages = messages
+        self.messages_by_channel_id = messages_by_channel_id
         self.target_message = target_message
         self.reactions = reactions
         self.emojis = [reaction.emoji for reaction in reactions]  # Retain order.
 
     def get_latest_messages(self, channel_id: str) -> List[Message]:
+        if self.messages_by_channel_id is not None:
+            return self.messages_by_channel_id.get(channel_id, [])
         return self.messages
 
     def get_reactions(self, timestamp: str, channel_id: str) -> List[Reaction]:
@@ -161,7 +170,7 @@ def test_on_pull_request_review(
     config = Config(
         slack_client=SlackClient(backend=slack_backend),
         github_client=GithubClient(backend=github_backend),
-        slack_channel_id="C1234",
+        slack_channel_ids=("C1234",),
         slapr_bot_user_id="U1234",
         number_of_approvals_required=1,
         emoji_review_started="test_review_started",
@@ -174,6 +183,38 @@ def test_on_pull_request_review(
     slapr.main(config)
 
     assert slack_backend.emojis == expected_emojis
+
+
+def test_on_pull_request_review_second_channel() -> None:
+    target_message = Message(text="Need review <https://github.com/example/repo/pull/42>", timestamp="yyyy-mm-dd")
+    slack_backend = MockSlackBackend(
+        messages=[],
+        target_message=target_message,
+        reactions=[],
+        messages_by_channel_id={"C1111": [], "C2222": [target_message]},
+    )
+    github_backend = MockGithubBackend(
+        reviews=[Review(state="approved", username="alice")],
+        event=MOCK_EVENT,
+        pr=PullRequest(state="open", merged=False, mergeable_state="clean"),
+    )
+
+    config = Config(
+        slack_client=SlackClient(backend=slack_backend),
+        github_client=GithubClient(backend=github_backend),
+        slack_channel_ids=("C1111", "C2222"),
+        slapr_bot_user_id="U1234",
+        number_of_approvals_required=1,
+        emoji_review_started="test_review_started",
+        emoji_approved="test_approved",
+        emoji_needs_change="test_needs_change",
+        emoji_merged="test_merged",
+        emoji_closed="test_closed",
+        emoji_commented="test_commented",
+    )
+    slapr.main(config)
+
+    assert slack_backend.emojis == ["test_review_started", "test_approved"]
 
 
 @pytest.mark.parametrize(
@@ -215,7 +256,7 @@ def test_on_pull_request(event: dict, pr: PullRequest, reactions: List[Reaction]
     config = Config(
         slack_client=SlackClient(backend=slack_backend),
         github_client=GithubClient(backend=github_backend),
-        slack_channel_id="C1234",
+        slack_channel_ids=("C1234",),
         slapr_bot_user_id="U1234",
         number_of_approvals_required=1,
         emoji_review_started="test_review_started",

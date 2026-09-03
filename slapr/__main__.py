@@ -22,7 +22,11 @@ config = Config(
             repo=os.environ["GITHUB_REPOSITORY"],
         )
     ),
-    slack_channel_id=os.environ["SLACK_CHANNEL_ID"],
+    slack_channel_ids=tuple(
+        channel_id.strip()
+        for channel_id in os.environ["SLACK_CHANNEL_ID"].split(",")
+        if channel_id.strip()
+    ),
     slapr_bot_user_id=os.environ["SLAPR_BOT_USER_ID"],
     number_of_approvals_required=max(1, int(os.environ.get("SLAPR_NUMBER_OF_APPROVALS_REQUIRED", 1))),
     emoji_review_started=os.environ.get("SLAPR_EMOJI_REVIEW_STARTED", "review_started"),

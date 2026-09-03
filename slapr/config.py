@@ -3,7 +3,7 @@
 # This product includes software developed at Datadog (https://www.datadoghq.com/)
 # Copyright 2023-present Datadog, Inc.
 
-from typing import Callable, NamedTuple
+from typing import Callable, NamedTuple, Tuple
 
 from .github import GithubClient
 from .slack import SlackClient
@@ -13,7 +13,7 @@ class Config(NamedTuple):
     slack_client: SlackClient
     github_client: GithubClient
 
-    slack_channel_id: str
+    slack_channel_ids: Tuple[str, ...]
     slapr_bot_user_id: str  # TODO: document how to obtain this user ID, or automate its retrieval.
 
     number_of_approvals_required: int
