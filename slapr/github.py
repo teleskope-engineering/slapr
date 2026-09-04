@@ -8,6 +8,8 @@ from typing import List, NamedTuple
 
 from github import Github
 
+ALLOWED_BOT_REVIEWERS = {"teleskope-sandy[bot]"}
+
 
 class Review(NamedTuple):
     state: str
@@ -46,7 +48,7 @@ class WebGithubBackend(GithubBackend):
         return [
             Review(state=review.state.lower(), username=review.user.login)
             for review in reviews
-            if review.user.type != "Bot"
+            if review.user.type != "Bot" or review.user.login in ALLOWED_BOT_REVIEWERS
         ]
 
     def get_pr(self, pr_number: int) -> PullRequest:
