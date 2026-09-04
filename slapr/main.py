@@ -7,6 +7,7 @@ from typing import Optional
 
 from . import emojis
 from .config import Config
+from .github import ALLOWED_BOT_REVIEWERS
 
 
 def main(config: Config) -> None:
@@ -22,8 +23,9 @@ def main(config: Config) -> None:
         return
 
     review = event.get("review") or {}
-    if review.get("user", {}).get("type") == "Bot":
-        print(f"Skipping bot review by {review['user'].get('login')}")
+    review_user = review.get("user", {})
+    if review_user.get("type") == "Bot" and review_user.get("login") not in ALLOWED_BOT_REVIEWERS:
+        print(f"Skipping bot review by {review_user.get('login')}")
         return
 
     pr_number: int = event["pull_request"]["number"]
