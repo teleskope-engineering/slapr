@@ -3,11 +3,11 @@
 # This product includes software developed at Datadog (https://www.datadoghq.com/)
 # Copyright 2023-present Datadog, Inc.
 
-from typing import Optional
+from typing import List
 
 from . import emojis
 from .config import Config
-from .github import ALLOWED_BOT_REVIEWERS
+from .github import ALLOWED_BOT_REVIEWERS, PullRequest, Review
 
 
 def main(config: Config) -> None:
@@ -31,6 +31,37 @@ def main(config: Config) -> None:
     pr_number: int = event["pull_request"]["number"]
     pr = github.get_pr(pr_number=pr_number)
     reviews = github.get_pr_reviews(pr_number=pr_number)
+
+    pr_url: str = event["pull_request"]["html_url"]
+    print(f"Event PR: {pr_url}")
+    print(f"Is merged: {pr.merged}")
+    print(f"Mergeable state: {pr.mergeable_state}")
+
+    found = False
+    for channel_id in config.slack_channel_ids:
+        timestamp = slack.find_timestamp_of_review_requested_message(pr_url=pr_url, channel_id=channel_id)
+        print(f"Slack message timestamp in {channel_id}: {timestamp}")
+        if timestamp is None:
+            continue
+        found = True
+
+        channel_reviews = reviews
+        if channel_id in config.human_only_channel_ids:
+            channel_reviews = [review for review in reviews if not review.is_bot]
+        _update_emojis(config, pr, channel_reviews, channel_id, timestamp)
+
+    if not found:
+        print(f"No message found requesting review for PR: {pr_url}")
+
+
+def _update_emojis(config: Config, pr: PullRequest, reviews: List[Review], channel_id: str, timestamp: str) -> None:
+    slack = config.slack_client
+
+    existing_emojis = slack.get_emojis_for_user(
+        timestamp=timestamp, channel_id=channel_id, user_id=config.slapr_bot_user_id
+    )
+    print(f"Existing emojis: {', '.join(existing_emojis)}")
+
     review_emoji = emojis.get_for_reviews(
         reviews,
         emoji_commented=config.emoji_commented,
@@ -39,36 +70,14 @@ def main(config: Config) -> None:
         number_of_approvals_required=config.number_of_approvals_required,
     )
 
-    pr_url: str = event["pull_request"]["html_url"]
-    print(f"Event PR: {pr_url}")
-
-    timestamp: Optional[str] = None
-    matched_channel_id: str = ""
-    for channel_id in config.slack_channel_ids:
-        timestamp = slack.find_timestamp_of_review_requested_message(pr_url=pr_url, channel_id=channel_id)
-        if timestamp is not None:
-            matched_channel_id = channel_id
-            break
-    print(f"Slack message timestamp: {timestamp}")
-
-    if timestamp is None:
-        print(f"No message found requesting review for PR: {pr_url}")
-        return
-
-    existing_emojis = slack.get_emojis_for_user(
-        timestamp=timestamp, channel_id=matched_channel_id, user_id=config.slapr_bot_user_id
-    )
-    print(f"Existing emojis: {', '.join(existing_emojis)}")
-
-    # Review emoji
-    new_emojis = {config.emoji_review_started}
+    # Review emoji. Human-only channels get no review_started until a human has actually reviewed.
+    new_emojis = set()
+    if reviews or channel_id not in config.human_only_channel_ids:
+        new_emojis.add(config.emoji_review_started)
     if review_emoji:
         new_emojis.add(review_emoji)
 
     # PR emoji
-    print(f"Is merged: {pr.merged}")
-    print(f"Mergeable state: {pr.mergeable_state}")
-
     if pr.merged:
         new_emojis.add(config.emoji_merged)
     elif pr.state == "closed":
@@ -82,16 +91,8 @@ def main(config: Config) -> None:
     print(f"Emojis to add (ordered) : {', '.join(sorted_emojis_to_add)}")
     print(f"Emojis to remove        : {', '.join(emojis_to_remove)}")
 
-    for review_emoji in sorted_emojis_to_add:
-        slack.add_reaction(
-            timestamp=timestamp,
-            emoji=review_emoji,
-            channel_id=matched_channel_id,
-        )
+    for emoji in sorted_emojis_to_add:
+        slack.add_reaction(timestamp=timestamp, emoji=emoji, channel_id=channel_id)
 
-    for review_emoji in emojis_to_remove:
-        slack.remove_reaction(
-            timestamp=timestamp,
-            emoji=review_emoji,
-            channel_id=matched_channel_id,
-        )
+    for emoji in emojis_to_remove:
+        slack.remove_reaction(timestamp=timestamp, emoji=emoji, channel_id=channel_id)

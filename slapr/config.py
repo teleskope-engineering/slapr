@@ -25,6 +25,9 @@ class Config(NamedTuple):
     emoji_closed: str
     emoji_commented: str
 
+    # Channels where only human reviews drive emojis (e.g. #ptal, so sandy approvals don't stamp there).
+    human_only_channel_ids: Tuple[str, ...] = ()
+
     @property
     def emojis_by_review_step(self) -> Callable[[str], int]:
         """A key function for sorting emojis in the order of the usual review process.

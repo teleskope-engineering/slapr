@@ -56,6 +56,7 @@ jobs:
         SLACK_API_TOKEN: "${{ secrets.SLACK_BOT_USER_OAUTH_ACCESS_TOKEN }}"
         SLAPR_BOT_USER_ID: UTMS06TPX
         SLAPR_NUMBER_OF_APPROVALS_REQUIRED: 2 # integer minimum=1 default=1. The number of approvals that are required for the approval emoji to be added in Slack
+        SLAPR_HUMAN_ONLY_CHANNEL_IDS: CNY5XCHAA # optional; in these channels bot reviews are ignored
 ```
 
 ## Troubleshoot

@@ -14,6 +14,7 @@ ALLOWED_BOT_REVIEWERS = {"teleskope-sandy[bot]"}
 class Review(NamedTuple):
     state: str
     username: str
+    is_bot: bool = False
 
 
 class PullRequest(NamedTuple):
@@ -46,7 +47,7 @@ class WebGithubBackend(GithubBackend):
     def get_pr_reviews(self, pr_number: int) -> List[Review]:
         reviews = self._gh.get_repo(self.repo).get_pull(pr_number).get_reviews()
         return [
-            Review(state=review.state.lower(), username=review.user.login)
+            Review(state=review.state.lower(), username=review.user.login, is_bot=review.user.type == "Bot")
             for review in reviews
             if review.user.type != "Bot" or review.user.login in ALLOWED_BOT_REVIEWERS
         ]
