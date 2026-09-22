@@ -4,6 +4,7 @@
 # Copyright 2023-present Datadog, Inc.
 
 import os
+from typing import Tuple
 
 import github
 import slack_sdk
@@ -12,6 +13,11 @@ from .config import Config
 from .github import GithubClient, WebGithubBackend
 from .main import main
 from .slack import SlackClient, WebSlackBackend
+
+
+def _parse_channel_ids(value: str) -> Tuple[str, ...]:
+    return tuple(channel_id.strip() for channel_id in value.split(",") if channel_id.strip())
+
 
 config = Config(
     slack_client=SlackClient(backend=WebSlackBackend(client=slack_sdk.WebClient(os.environ["SLACK_API_TOKEN"]))),
@@ -22,11 +28,7 @@ config = Config(
             repo=os.environ["GITHUB_REPOSITORY"],
         )
     ),
-    slack_channel_ids=tuple(
-        channel_id.strip()
-        for channel_id in os.environ["SLACK_CHANNEL_ID"].split(",")
-        if channel_id.strip()
-    ),
+    slack_channel_ids=_parse_channel_ids(os.environ["SLACK_CHANNEL_ID"]),
     slapr_bot_user_id=os.environ["SLAPR_BOT_USER_ID"],
     number_of_approvals_required=max(1, int(os.environ.get("SLAPR_NUMBER_OF_APPROVALS_REQUIRED", 1))),
     emoji_review_started=os.environ.get("SLAPR_EMOJI_REVIEW_STARTED", "review_started"),
@@ -35,6 +37,7 @@ config = Config(
     emoji_merged=os.environ.get("SLAPR_EMOJI_MERGED", "merged"),
     emoji_closed=os.environ.get("SLAPR_EMOJI_CLOSED", "closed"),
     emoji_commented=os.environ.get("SLAPR_EMOJI_COMMENTED", "comment"),
+    human_only_channel_ids=_parse_channel_ids(os.environ.get("SLAPR_HUMAN_ONLY_CHANNEL_IDS", "")),
 )
 
 main(config)

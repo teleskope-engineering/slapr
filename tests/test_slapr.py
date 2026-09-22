@@ -26,6 +26,7 @@ class MockSlackBackend(SlackBackend):
         self.target_message = target_message
         self.reactions = reactions
         self.emojis = [reaction.emoji for reaction in reactions]  # Retain order.
+        self.added_by_channel: Dict[str, List[str]] = {}
 
     def get_latest_messages(self, channel_id: str) -> List[Message]:
         if self.messages_by_channel_id is not None:
@@ -37,9 +38,12 @@ class MockSlackBackend(SlackBackend):
 
     def add_reaction(self, timestamp: str, emoji: str, channel_id: str) -> None:
         assert timestamp == self.target_message.timestamp
-        if emoji in self.emojis:
+        if emoji in self.added_by_channel.get(channel_id, []) or (
+            self.messages_by_channel_id is None and emoji in self.emojis
+        ):
             raise RuntimeError(f"Emoji already present: {emoji!r}")  # Mimick behavior of real Slack.
         self.emojis.append(emoji)
+        self.added_by_channel.setdefault(channel_id, []).append(emoji)
 
     def remove_reaction(self, timestamp: str, emoji: str, channel_id: str) -> None:
         assert timestamp == self.target_message.timestamp
@@ -269,3 +273,68 @@ def test_on_pull_request(event: dict, pr: PullRequest, reactions: List[Reaction]
     slapr.main(config)
 
     assert slack_backend.emojis == expected_emojis
+
+
+PTAL = "C1111"
+REVIEWS = "C2222"
+SANDY = "teleskope-sandy[bot]"
+
+
+@pytest.mark.parametrize(
+    "reviews, pr, expected_by_channel",
+    [
+        pytest.param(
+            [Review(state="approved", username=SANDY, is_bot=True)],
+            PullRequest(state="open", merged=False, mergeable_state="clean"),
+            {REVIEWS: ["test_review_started", "test_approved"]},
+            id="bot-only-approval-skips-human-only-channel",
+        ),
+        pytest.param(
+            [
+                Review(state="approved", username=SANDY, is_bot=True),
+                Review(state="commented", username="alice"),
+            ],
+            PullRequest(state="open", merged=False, mergeable_state="clean"),
+            {
+                PTAL: ["test_review_started", "test_commented"],
+                REVIEWS: ["test_review_started", "test_approved"],
+            },
+            id="human-only-channel-reflects-human-review",
+        ),
+        pytest.param(
+            [Review(state="approved", username=SANDY, is_bot=True)],
+            PullRequest(state="closed", merged=True, mergeable_state="clean"),
+            {PTAL: ["test_merged"], REVIEWS: ["test_review_started", "test_approved", "test_merged"]},
+            id="merge-still-marked-in-human-only-channel",
+        ),
+    ],
+)
+def test_human_only_channel(
+    reviews: List[Review], pr: PullRequest, expected_by_channel: Dict[str, List[str]]
+) -> None:
+    target_message = Message(text="Need review <https://github.com/example/repo/pull/42>", timestamp="yyyy-mm-dd")
+    slack_backend = MockSlackBackend(
+        messages=[],
+        target_message=target_message,
+        reactions=[],
+        messages_by_channel_id={PTAL: [target_message], REVIEWS: [target_message]},
+    )
+    github_backend = MockGithubBackend(reviews=reviews, event=MOCK_EVENT, pr=pr)
+
+    config = Config(
+        slack_client=SlackClient(backend=slack_backend),
+        github_client=GithubClient(backend=github_backend),
+        slack_channel_ids=(PTAL, REVIEWS),
+        slapr_bot_user_id="U1234",
+        number_of_approvals_required=1,
+        emoji_review_started="test_review_started",
+        emoji_approved="test_approved",
+        emoji_needs_change="test_needs_change",
+        emoji_merged="test_merged",
+        emoji_closed="test_closed",
+        emoji_commented="test_commented",
+        human_only_channel_ids=(PTAL,),
+    )
+    slapr.main(config)
+
+    assert slack_backend.added_by_channel == expected_by_channel
